@@ -23,6 +23,7 @@ import SauceLabsTunnel from '@theintern/digdug/SauceLabsTunnel';
 import TestingBotTunnel from '@theintern/digdug/TestingBotTunnel';
 import CrossBrowserTestingTunnel from '@theintern/digdug/CrossBrowserTestingTunnel';
 import NullTunnel from '@theintern/digdug/NullTunnel';
+import WebDriverTunnel from '@theintern/digdug/WebDriverTunnel';
 
 import { Config, EnvironmentSpec } from '../common/config';
 import Executor, { Events, Plugins } from './Executor';
@@ -117,6 +118,7 @@ export default class Node extends Executor<NodeEvents, Config, NodePlugins> {
     this.registerTunnel('browserstack', BrowserStackTunnel);
     this.registerTunnel('testingbot', TestingBotTunnel);
     this.registerTunnel('cbt', CrossBrowserTestingTunnel);
+    this.registerTunnel('webdriver', WebDriverTunnel);
 
     if (options) {
       this.configure(options);
@@ -350,6 +352,7 @@ export default class Node extends Executor<NodeEvents, Config, NodePlugins> {
         return serverTask
           .then(() => {
             const tunnelOptions = config.tunnelOptions;
+            tunnelOptions.basePath = config.basePath;
             if (config.tunnel === 'browserstack') {
               const options = <BrowserStackOptions>tunnelOptions;
               options.servers = options.servers || [];
