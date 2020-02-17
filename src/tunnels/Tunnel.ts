@@ -1,19 +1,23 @@
 import {
+  CancellablePromise,
+  createCompositeHandle,
   Evented,
   EventObject,
   Handle,
-  createCompositeHandle,
-  Task,
-  CancellablePromise,
   request,
-  Response
+  Response,
+  Task
 } from '../common';
-import { spawn, ChildProcess } from 'child_process';
+import { ChildProcess } from 'child_process';
 import { join } from 'path';
 import { format as formatUrl } from 'url';
-import { fileExists, kill, on } from './lib/util';
+import { fileExists, on } from './lib/util';
 import { JobState } from './interfaces';
 import decompress from 'decompress';
+import {
+  makeChildWithCommand,
+  stopChildProcess
+} from './lib/tunnelChildProcesses';
 
 /**
  * A Tunnel is a mechanism for connecting to a WebDriver service provider that
@@ -120,6 +124,12 @@ export default class Tunnel extends Evented<TunnelEvents, string>
 
   /** Whether or not to tell the tunnel to provide verbose logging output. */
   verbose!: boolean;
+
+  /**
+   * The directory in which the tunnel implementations will download
+   * any necessary applications.
+   */
+  basePath: string = __dirname;
 
   protected _startTask: CancellablePromise<any> | undefined;
   protected _stopTask: Promise<number | void> | undefined;
@@ -452,91 +462,12 @@ export default class Tunnel extends Evented<TunnelEvents, string>
     executor: ChildExecutor,
     ...values: string[]
   ): CancellablePromise {
-    const command = this.executable;
-    const args = this._makeArgs(...values);
-    const options = this._makeOptions(...values);
-    const child = spawn(command, args, options);
-
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-
-    let handle: Handle;
-    let canceled = false;
-
-    // Ensure child process is killed when parent exits
-    process.on('exit', () => kill(child.pid));
-    process.on('SIGINT', () => kill(child.pid));
-
-    const task = new Task(
-      (resolve, reject) => {
-        let errorMessage = '';
-        let exitCode: number | undefined;
-        let stderrClosed = false;
-        let exitted = false;
-
-        function handleChildExit() {
-          reject(
-            new Error(
-              `Tunnel failed to start: ${errorMessage ||
-                `Exit code: ${exitCode}`}`
-            )
-          );
-        }
-
-        handle = createCompositeHandle(
-          on(child, 'error', reject),
-
-          on(child.stderr, 'data', (data: string) => {
-            errorMessage += data;
-          }),
-
-          on(child, 'exit', () => {
-            exitted = true;
-            if (stderrClosed) {
-              handleChildExit();
-            }
-          }),
-
-          // stderr might still have data in buffer at the time the
-          // exit event is sent, so we have to store data from stderr
-          // and the exit code and reject only once stderr closes
-          on(child.stderr, 'close', () => {
-            stderrClosed = true;
-            if (exitted) {
-              handleChildExit();
-            }
-          })
-        );
-
-        const result = executor(child, resolve, reject);
-        if (result) {
-          handle = createCompositeHandle(handle, result);
-        }
-      },
-      () => {
-        canceled = true;
-
-        // Make a best effort to kill the process, but don't throw
-        // exceptions
-        try {
-          kill(child.pid);
-        } catch {
-          // ignored
-        }
-      }
+    return makeChildWithCommand(
+      this.executable,
+      executor,
+      this._makeArgs(...values),
+      this._makeOptions(...values)
     );
-
-    return task.finally(() => {
-      handle.destroy();
-      if (canceled) {
-        // We only want this to run when cancelation has occurred
-        return new Promise(resolve => {
-          child.once('exit', () => {
-            resolve();
-          });
-        });
-      }
-    });
   }
 
   /**
@@ -631,21 +562,7 @@ export default class Tunnel extends Evented<TunnelEvents, string>
    */
   protected _stop() {
     return new Promise<number | void>((resolve, reject) => {
-      const childProcess = this._process;
-      if (!childProcess) {
-        resolve();
-        return;
-      }
-
-      childProcess.once('exit', code => {
-        resolve(code == null ? undefined : code);
-      });
-
-      try {
-        kill(childProcess.pid);
-      } catch (error) {
-        reject(error);
-      }
+      stopChildProcess(this._process, resolve, reject);
     });
   }
 }
@@ -779,6 +696,9 @@ export interface TunnelProperties extends DownloadProperties {
 
   /** [[Tunnel.Tunnel.verbose|More info]] */
   verbose: boolean;
+
+  /** [[Tunnel.Tunnel.basePath|More info]] */
+  basePath: string | undefined;
 }
 
 export type TunnelOptions = Partial<TunnelProperties>;

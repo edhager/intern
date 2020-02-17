@@ -396,6 +396,9 @@ registerSuite('core/lib/executors/Node', function() {
           replace(() => import('src/tunnels/SauceLabsTunnel')).withDefault(
             MockTunnel as any
           );
+          replace(() => import('src/tunnels/WebDriverTunnel')).withDefault(
+            MockTunnel as any
+          );
           replace(() => import('src/core/lib/ProxiedSession')).withDefault(
             MockSession as any
           );

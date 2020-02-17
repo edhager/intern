@@ -2,9 +2,9 @@ import intern from '../index';
 import Element, { ElementOrElementId } from './Element';
 import Server from './Server';
 import findDisplayed from './lib/findDisplayed';
-import { Task, CancellablePromise, partial } from '../common';
+import { CancellablePromise, partial, Task } from '../common';
 import statusCodes from './lib/statusCodes';
-import Locator, { toW3cLocator, Strategy } from './lib/Locator';
+import Locator, { Strategy, toW3cLocator } from './lib/Locator';
 import {
   forCommand as utilForCommand,
   manualFindByLinkText,
@@ -432,10 +432,7 @@ export default class Session extends Locator<
     })
       .then(value => convertToElements(this, value), fixExecuteError)
       .catch(error => {
-        if (
-          error.detail.error === 'unknown command' &&
-          !this.capabilities.usesWebDriverExecuteSync
-        ) {
+        if (!this.capabilities.usesWebDriverExecuteSync) {
           this.capabilities.usesWebDriverExecuteSync = true;
           return this.execute(script, args);
         }
@@ -500,10 +497,7 @@ export default class Session extends Locator<
     })
       .then(partial(convertToElements, this), fixExecuteError)
       .catch(error => {
-        if (
-          error.detail.error === 'unknown command' &&
-          !this.capabilities.usesWebDriverExecuteAsync
-        ) {
+        if (!this.capabilities.usesWebDriverExecuteAsync) {
           this.capabilities.usesWebDriverExecuteAsync = true;
           return this.executeAsync<T>(script, args);
         }

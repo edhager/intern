@@ -5,16 +5,15 @@ import { CoverageMap, createCoverageMap } from 'istanbul-lib-coverage';
 import { createInstrumenter, Instrumenter } from 'istanbul-lib-instrument';
 import { createSourceMapStore, MapStore } from 'istanbul-lib-source-maps';
 import {
-  hookRunInThisContext,
   hookRequire,
+  hookRunInThisContext,
   unhookRunInThisContext
 } from 'istanbul-lib-hook';
 import { register } from 'ts-node';
-import { global, Task, CancellablePromise, deepMixin } from '../../../common';
+import { CancellablePromise, deepMixin, global, Task } from '../../../common';
 import Command from '../../../webdriver/Command';
 import LeadfootServer from '../../../webdriver/Server';
 import Tunnel, { DownloadProgressEvent } from '../../../tunnels/Tunnel';
-
 // Dig Dug tunnels
 import SeleniumTunnel, {
   DriverDescriptor
@@ -26,6 +25,7 @@ import SauceLabsTunnel from '../../../tunnels/SauceLabsTunnel';
 import TestingBotTunnel from '../../../tunnels/TestingBotTunnel';
 import CrossBrowserTestingTunnel from '../../../tunnels/CrossBrowserTestingTunnel';
 import NullTunnel from '../../../tunnels/NullTunnel';
+import WebDriverTunnel from '../../../tunnels/WebDriverTunnel';
 
 import { Config, EnvironmentSpec } from '../common/config';
 import Executor, { Events, Plugins } from './Executor';
@@ -37,11 +37,10 @@ import ProxiedSession from '../ProxiedSession';
 import Environment from '../Environment';
 import resolveEnvironments from '../resolveEnvironments';
 import Server from '../Server';
-import Suite, { isSuite, isFailedSuite } from '../Suite';
+import Suite, { isFailedSuite, isSuite } from '../Suite';
 import RemoteSuite from '../RemoteSuite';
 import { RuntimeEnvironment } from '../types';
 import * as console from '../common/console';
-
 // Reporters
 import Pretty from '../reporters/Pretty';
 import Runner from '../reporters/Runner';
@@ -121,6 +120,7 @@ export default class Node extends Executor<NodeEvents, Config, NodePlugins> {
     this.registerTunnel('browserstack', BrowserStackTunnel);
     this.registerTunnel('testingbot', TestingBotTunnel);
     this.registerTunnel('cbt', CrossBrowserTestingTunnel);
+    this.registerTunnel('webdriver', WebDriverTunnel);
 
     if (options) {
       this.configure(options);
@@ -415,14 +415,17 @@ export default class Node extends Executor<NodeEvents, Config, NodePlugins> {
   protected _createTunnel() {
     const config = this.config;
     const tunnelOptions = config.tunnelOptions;
+
     if (config.tunnel === 'browserstack') {
       const options = <BrowserStackOptions>tunnelOptions;
       options.servers = options.servers || [];
       options.servers.push(config.serverUrl);
     }
-
     if ('proxy' in config && !('proxy' in tunnelOptions)) {
       tunnelOptions.proxy = config.proxy;
+    }
+    if ('basePath' in config && !('basePath' in tunnelOptions)) {
+      tunnelOptions.basePath = config.basePath;
     }
 
     const TunnelConstructor = this.getTunnel(config.tunnel);
